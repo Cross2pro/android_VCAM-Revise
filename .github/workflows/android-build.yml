@@ -18,6 +18,9 @@ jobs:
           java-version: '11'
           cache: gradle
 
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
       - name: Build with Gradle
         run: ./gradlew --no-daemon clean assembleRelease
 
