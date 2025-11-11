@@ -63,3 +63,13 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: app/build/outputs/apk/release/app-release.apk
+      - name: Build with Gradle
+        run: ./gradlew --no-daemon clean assembleRelease
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/**
