@@ -27,7 +27,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/description"
                 android:textSize="16sp"
-                android:lineSpacing="4dp"
+                android:lineSpacingExtra="4dp"
                 android:textColor="@color/text_primary" />
 
             <View
@@ -43,7 +43,7 @@
                 android:layout_height="wrap_content"
                 android:text="@string/Warning"
                 android:textSize="14sp"
-                android:lineSpacing="4dp"
+                android:lineSpacingExtra="4dp"
                 android:textColor="@color/warning_red"
                 android:textStyle="bold" />
         </LinearLayout>
