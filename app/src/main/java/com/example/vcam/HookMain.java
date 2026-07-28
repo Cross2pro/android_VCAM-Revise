@@ -26,6 +26,9 @@ import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.widget.Toast;
 
+import android.media.Image;
+import java.nio.ByteBuffer;
+import java.lang.reflect.Field;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -537,7 +540,8 @@ public class HookMain implements IXposedHookLoadPackage {
                     return;
                 }
                 String surfaceInfo = param.args[0].toString();
-                if (surfaceInfo.contains("Surface(name=null)")) {
+                boolean isReaderSurface = surfaceInfo.contains("Surface(name=null)");
+                if (isReaderSurface) {
                     if (c2_reader_Surfcae == null) {
                         c2_reader_Surfcae = (Surface) param.args[0];
                     } else {
@@ -555,6 +559,10 @@ public class HookMain implements IXposedHookLoadPackage {
                     }
                 }
                 XposedBridge.log("【VCAM】添加目标：" + param.args[0].toString());
+                if (isReaderSurface && imageReaderFormat == 256) {
+                    XposedBridge.log("【VCAM】ImageReader格式为JPEG，不替换Surface以允许原相机拍照");
+                    return;
+                }
                 param.args[0] = c2_virtual_surface;
 
             }
@@ -679,6 +687,53 @@ public class HookMain implements IXposedHookLoadPackage {
             }
         });
 
+        try {
+            Class<?> surfaceImageClass = XposedHelpers.findClassIfExists("android.media.ImageReader$SurfaceImage", lpparam.classLoader);
+            if (surfaceImageClass != null) {
+                XposedHelpers.findAndHookMethod(surfaceImageClass, "getPlanes", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                        Image image = (Image) param.thisObject;
+                        if (image.getFormat() == 256 && imageReaderFormat == 256 && (c2_reader_Surfcae != null || c2_reader_Surfcae_1 != null)) {
+                            Object[] planes = (Object[]) param.getResult();
+                            if (planes != null && planes.length > 0) {
+                                File replacementFile = pickRandomImageFile(video_path);
+                                if (replacementFile != null) {
+                                    Bitmap pict = getBMP(replacementFile.getAbsolutePath());
+                                    if (pict != null) {
+                                        ByteArrayOutputStream temp_array = new ByteArrayOutputStream();
+                                        pict.compress(Bitmap.CompressFormat.JPEG, 100, temp_array);
+                                        byte[] jpeg_data = temp_array.toByteArray();
+                                        ByteBuffer newBuffer = ByteBuffer.allocateDirect(jpeg_data.length);
+                                        newBuffer.put(jpeg_data);
+                                        newBuffer.rewind();
+                                        
+                                        Field bufferField = null;
+                                        try {
+                                            bufferField = planes[0].getClass().getDeclaredField("mBuffer");
+                                        } catch (NoSuchFieldException e) {
+                                            for (Field f : planes[0].getClass().getDeclaredFields()) {
+                                                if (f.getType() == ByteBuffer.class) {
+                                                    bufferField = f;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        if (bufferField != null) {
+                                            bufferField.setAccessible(true);
+                                            bufferField.set(planes[0], newBuffer);
+                                            XposedBridge.log("【VCAM】成功替换ImageReader的JPEG图像数据");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        } catch (Throwable t) {
+            XposedBridge.log("【VCAM】Hook SurfaceImage.getPlanes失败: " + t);
+        }
 
         XposedHelpers.findAndHookMethod("android.hardware.camera2.CameraCaptureSession.CaptureCallback", lpparam.classLoader, "onCaptureFailed", CameraCaptureSession.class, CaptureRequest.class, CaptureFailure.class,
                 new XC_MethodHook() {
@@ -693,42 +748,42 @@ public class HookMain implements IXposedHookLoadPackage {
     private void process_camera2_play() {
 
         if (c2_reader_Surfcae != null) {
-            if (c2_hw_decode_obj != null) {
-                c2_hw_decode_obj.stopDecode();
-                c2_hw_decode_obj = null;
-            }
-
-            c2_hw_decode_obj = new VideoToFrames();
-            try {
-                if (imageReaderFormat == 256) {
-                    c2_hw_decode_obj.setSaveFrames("null", OutputImageFormat.JPEG);
-                } else {
-                    c2_hw_decode_obj.setSaveFrames("null", OutputImageFormat.NV21);
+            if (imageReaderFormat == 256) {
+                XposedBridge.log("【VCAM】ImageReader格式为JPEG，不启动视频解码以防报错");
+            } else {
+                if (c2_hw_decode_obj != null) {
+                    c2_hw_decode_obj.stopDecode();
+                    c2_hw_decode_obj = null;
                 }
-                c2_hw_decode_obj.set_surfcae(c2_reader_Surfcae);
-                c2_hw_decode_obj.decode(video_path + "virtual.mp4");
-            } catch (Throwable throwable) {
-                XposedBridge.log("【VCAM】" + throwable);
+
+                c2_hw_decode_obj = new VideoToFrames();
+                try {
+                    c2_hw_decode_obj.setSaveFrames("null", OutputImageFormat.NV21);
+                    c2_hw_decode_obj.set_surfcae(c2_reader_Surfcae);
+                    c2_hw_decode_obj.decode(video_path + "virtual.mp4");
+                } catch (Throwable throwable) {
+                    XposedBridge.log("【VCAM】" + throwable);
+                }
             }
         }
 
         if (c2_reader_Surfcae_1 != null) {
-            if (c2_hw_decode_obj_1 != null) {
-                c2_hw_decode_obj_1.stopDecode();
-                c2_hw_decode_obj_1 = null;
-            }
-
-            c2_hw_decode_obj_1 = new VideoToFrames();
-            try {
-                if (imageReaderFormat == 256) {
-                    c2_hw_decode_obj_1.setSaveFrames("null", OutputImageFormat.JPEG);
-                } else {
-                    c2_hw_decode_obj_1.setSaveFrames("null", OutputImageFormat.NV21);
+            if (imageReaderFormat == 256) {
+                XposedBridge.log("【VCAM】ImageReader_1格式为JPEG，不启动视频解码以防报错");
+            } else {
+                if (c2_hw_decode_obj_1 != null) {
+                    c2_hw_decode_obj_1.stopDecode();
+                    c2_hw_decode_obj_1 = null;
                 }
-                c2_hw_decode_obj_1.set_surfcae(c2_reader_Surfcae_1);
-                c2_hw_decode_obj_1.decode(video_path + "virtual.mp4");
-            } catch (Throwable throwable) {
-                XposedBridge.log("【VCAM】" + throwable);
+
+                c2_hw_decode_obj_1 = new VideoToFrames();
+                try {
+                    c2_hw_decode_obj_1.setSaveFrames("null", OutputImageFormat.NV21);
+                    c2_hw_decode_obj_1.set_surfcae(c2_reader_Surfcae_1);
+                    c2_hw_decode_obj_1.decode(video_path + "virtual.mp4");
+                } catch (Throwable throwable) {
+                    XposedBridge.log("【VCAM】" + throwable);
+                }
             }
         }
 
