@@ -9,16 +9,26 @@ android {
         applicationId "com.example.vcam"
         minSdk 21
         targetSdk 26
-        versionCode 28
-        versionName "4.4"
+        versionCode 30
+        versionName "4.6"
 
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        release {
+            storeFile file("release.jks")
+            storePassword "password"
+            keyAlias "key0"
+            keyPassword "password"
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
     compileOptions {
